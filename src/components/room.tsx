@@ -4,11 +4,17 @@ import { LiveblocksProvider, RoomProvider } from "@liveblocks/react";
 import { LiveMap } from "@liveblocks/client";
 import type { ReactNode } from "react";
 
-export function Room({ children }: { children: ReactNode }) {
+export function Room({
+  roomId,
+  children,
+}: {
+  roomId: string;
+  children: ReactNode;
+}) {
   return (
     <LiveblocksProvider authEndpoint="/api/liveblocks-auth">
       <RoomProvider
-        id="collab-kanban-main"
+        id={roomId}
         initialPresence={{ cursor: null }}
         initialStorage={{ cards: new LiveMap() }}
       >
