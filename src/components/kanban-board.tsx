@@ -35,7 +35,13 @@ function CardVisual({ card }: { card: CardData }) {
   );
 }
 
-function SortableCard({ card }: { card: CardData }) {
+function SortableCard({
+  card,
+  onDelete,
+}: {
+  card: CardData;
+  onDelete: (cardId: string) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: card.id });
 
@@ -51,9 +57,27 @@ function SortableCard({ card }: { card: CardData }) {
       style={style}
       {...attributes}
       {...listeners}
-      className="cursor-grab touch-none active:cursor-grabbing"
+      className="group relative cursor-grab touch-none active:cursor-grabbing"
     >
       <CardVisual card={card} />
+      <button
+        type="button"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={() => onDelete(card.id)}
+        aria-label="Delete card"
+        className="absolute right-1 top-1 hidden rounded p-1 text-zinc-400 hover:bg-black/[.06] hover:text-zinc-700 group-hover:block dark:hover:bg-white/[.1] dark:hover:text-zinc-200"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -128,11 +152,13 @@ function Column({
   title,
   cards,
   onAddCard,
+  onDeleteCard,
 }: {
   id: ColumnId;
   title: string;
   cards: CardData[];
   onAddCard: (columnId: ColumnId, title: string) => void;
+  onDeleteCard: (cardId: string) => void;
 }) {
   const { setNodeRef } = useDroppable({ id });
   const cardIds = useMemo(() => cards.map((card) => card.id), [cards]);
@@ -147,9 +173,15 @@ function Column({
       </h2>
       <div ref={setNodeRef} className="flex min-h-10 flex-col gap-2">
         <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
-          {cards.map((card) => (
-            <SortableCard key={card.id} card={card} />
-          ))}
+          {cards.length === 0 ? (
+            <p className="rounded-md border border-dashed border-black/[.08] p-3 text-center text-xs text-zinc-400 dark:border-white/[.145] dark:text-zinc-500">
+              No cards yet
+            </p>
+          ) : (
+            cards.map((card) => (
+              <SortableCard key={card.id} card={card} onDelete={onDeleteCard} />
+            ))
+          )}
         </SortableContext>
       </div>
       <AddCardForm onAdd={(cardTitle) => onAddCard(id, cardTitle)} />
@@ -187,6 +219,10 @@ export function KanbanBoard() {
     },
     [],
   );
+
+  const deleteCard = useMutation(({ storage }, cardId: string) => {
+    storage.get("cards").delete(cardId);
+  }, []);
 
   const moveCard = useMutation(
     ({ storage }, cardId: string, columnId: ColumnId, order: number) => {
@@ -271,6 +307,7 @@ export function KanbanBoard() {
             title={column.title}
             cards={cardsByColumn[column.id]}
             onAddCard={addCard}
+            onDeleteCard={deleteCard}
           />
         ))}
       </div>
