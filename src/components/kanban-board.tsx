@@ -2,9 +2,25 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useStorage } from "@liveblocks/react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { COLUMNS, type CardData, type ColumnId } from "@/types/kanban";
 
-function Card({ card }: { card: CardData }) {
+function CardVisual({ card }: { card: CardData }) {
   return (
     <div className="rounded-md border border-black/[.08] bg-white p-3 shadow-sm dark:border-white/[.145] dark:bg-zinc-900">
       <p className="text-sm font-medium text-black dark:text-zinc-50">
@@ -15,6 +31,29 @@ function Card({ card }: { card: CardData }) {
           {card.description}
         </p>
       )}
+    </div>
+  );
+}
+
+function SortableCard({ card }: { card: CardData }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: card.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="cursor-grab touch-none active:cursor-grabbing"
+    >
+      <CardVisual card={card} />
     </div>
   );
 }
@@ -95,6 +134,9 @@ function Column({
   cards: CardData[];
   onAddCard: (columnId: ColumnId, title: string) => void;
 }) {
+  const { setNodeRef } = useDroppable({ id });
+  const cardIds = useMemo(() => cards.map((card) => card.id), [cards]);
+
   return (
     <div className="flex w-72 shrink-0 flex-col gap-3 rounded-lg bg-zinc-100 p-3 dark:bg-zinc-900/50">
       <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
@@ -103,10 +145,12 @@ function Column({
           {cards.length}
         </span>
       </h2>
-      <div className="flex flex-col gap-2">
-        {cards.map((card) => (
-          <Card key={card.id} card={card} />
-        ))}
+      <div ref={setNodeRef} className="flex min-h-10 flex-col gap-2">
+        <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
+          {cards.map((card) => (
+            <SortableCard key={card.id} card={card} />
+          ))}
+        </SortableContext>
       </div>
       <AddCardForm onAdd={(cardTitle) => onAddCard(id, cardTitle)} />
     </div>
@@ -115,6 +159,7 @@ function Column({
 
 export function KanbanBoard() {
   const cards = useStorage((root) => root.cards);
+  const [activeCard, setActiveCard] = useState<CardData | null>(null);
 
   const cardsByColumn = useMemo(() => {
     const result: Record<ColumnId, CardData[]> = {
@@ -126,6 +171,9 @@ export function KanbanBoard() {
       for (const card of Object.values(cards)) {
         result[card.columnId].push(card);
       }
+      for (const columnId of Object.keys(result) as ColumnId[]) {
+        result[columnId].sort((a, b) => a.order - b.order);
+      }
     }
     return result;
   }, [cards]);
@@ -133,10 +181,73 @@ export function KanbanBoard() {
   const addCard = useMutation(
     ({ storage }, columnId: ColumnId, title: string) => {
       const id = crypto.randomUUID();
-      storage.get("cards").set(id, { id, columnId, title, description: "" });
+      storage
+        .get("cards")
+        .set(id, { id, columnId, title, description: "", order: Date.now() });
     },
     [],
   );
+
+  const moveCard = useMutation(
+    ({ storage }, cardId: string, columnId: ColumnId, order: number) => {
+      const cardsMap = storage.get("cards");
+      const card = cardsMap.get(cardId);
+      if (!card) return;
+      cardsMap.set(cardId, { ...card, columnId, order });
+    },
+    [],
+  );
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
+
+  function handleDragStart(event: DragStartEvent) {
+    const card = cards?.[String(event.active.id)];
+    setActiveCard(card ?? null);
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveCard(null);
+    const { active, over } = event;
+    if (!over || !cards) return;
+
+    const activeCardData = cards[String(active.id)];
+    if (!activeCardData) return;
+
+    const overIsColumn = COLUMNS.some((column) => column.id === over.id);
+    const targetColumnId: ColumnId = overIsColumn
+      ? (over.id as ColumnId)
+      : (cards[String(over.id)]?.columnId ?? activeCardData.columnId);
+
+    const targetCards = cardsByColumn[targetColumnId].filter(
+      (card) => card.id !== activeCardData.id,
+    );
+
+    let newOrder: number;
+    if (overIsColumn || targetCards.length === 0) {
+      newOrder =
+        targetCards.length > 0
+          ? targetCards[targetCards.length - 1].order + 1
+          : Date.now();
+    } else {
+      const overIndex = targetCards.findIndex((card) => card.id === over.id);
+      if (overIndex === -1) {
+        newOrder = targetCards[targetCards.length - 1].order + 1;
+      } else {
+        const before = targetCards[overIndex - 1];
+        const afterCard = targetCards[overIndex];
+        newOrder = before ? (before.order + afterCard.order) / 2 : afterCard.order - 1;
+      }
+    }
+
+    if (
+      targetColumnId !== activeCardData.columnId ||
+      newOrder !== activeCardData.order
+    ) {
+      moveCard(activeCardData.id, targetColumnId, newOrder);
+    }
+  }
 
   if (cards === null) {
     return (
@@ -147,16 +258,29 @@ export function KanbanBoard() {
   }
 
   return (
-    <div className="flex gap-4 overflow-x-auto p-6">
-      {COLUMNS.map((column) => (
-        <Column
-          key={column.id}
-          id={column.id}
-          title={column.title}
-          cards={cardsByColumn[column.id]}
-          onAddCard={addCard}
-        />
-      ))}
-    </div>
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="flex gap-4 overflow-x-auto p-6">
+        {COLUMNS.map((column) => (
+          <Column
+            key={column.id}
+            id={column.id}
+            title={column.title}
+            cards={cardsByColumn[column.id]}
+            onAddCard={addCard}
+          />
+        ))}
+      </div>
+      <DragOverlay>
+        {activeCard ? (
+          <div className="rotate-2 opacity-90">
+            <CardVisual card={activeCard} />
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 }

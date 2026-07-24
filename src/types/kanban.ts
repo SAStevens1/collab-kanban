@@ -5,6 +5,7 @@ export type CardData = {
   columnId: ColumnId;
   title: string;
   description: string;
+  order: number;
 };
 
 export const COLUMNS: { id: ColumnId; title: string }[] = [
