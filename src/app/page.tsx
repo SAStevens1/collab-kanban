@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { auth, signIn, signOut } from "@/auth";
 
 export default async function Home() {
@@ -14,6 +15,12 @@ export default async function Home() {
           <p className="text-zinc-700 dark:text-zinc-300">
             Signed in as {session.user.name ?? session.user.email}
           </p>
+          <Link
+            href="/board"
+            className="rounded-full border border-solid border-black/[.08] px-5 py-3 text-sm font-medium transition-colors hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+          >
+            Enter board
+          </Link>
           <form
             action={async () => {
               "use server";
