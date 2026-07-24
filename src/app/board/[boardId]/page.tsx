@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { signOut } from "@/auth";
 import { requireCurrentUser } from "@/lib/current-user";
 import { getBoardMembership, getBoardWithMembers } from "@/lib/boards";
-import { inviteMember } from "@/lib/board-actions";
+import { inviteMember, removeMember } from "@/lib/board-actions";
 import { Room } from "@/components/room";
 import { PresenceLayer } from "@/components/live-cursors";
 import { KanbanBoard } from "@/components/kanban-board";
@@ -69,11 +69,29 @@ export default async function BoardPage({
           {membership.role === "OWNER" && (
             <div className="flex flex-wrap items-center gap-3 border-b border-black/[.08] px-6 py-3 dark:border-white/[.145]">
               <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                Members:{" "}
-                {board.memberships
-                  .map((m) => m.user.name ?? m.user.githubLogin)
-                  .join(", ")}
+                Members:
               </span>
+              <div className="flex flex-wrap items-center gap-2">
+                {board.memberships.map((m) => (
+                  <span
+                    key={m.id}
+                    className="flex items-center gap-1 rounded-full bg-zinc-100 py-0.5 pl-2 pr-1 text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                  >
+                    {m.user.name ?? m.user.githubLogin}
+                    {m.role !== "OWNER" && (
+                      <form action={removeMember.bind(null, boardId, m.userId)}>
+                        <button
+                          type="submit"
+                          aria-label={`Remove ${m.user.githubLogin}`}
+                          className="ml-1 rounded-full px-1 text-zinc-400 hover:bg-black/[.06] hover:text-red-500 dark:hover:bg-white/[.1]"
+                        >
+                          ×
+                        </button>
+                      </form>
+                    )}
+                  </span>
+                ))}
+              </div>
               <form
                 action={inviteMember.bind(null, boardId)}
                 className="flex items-center gap-2"

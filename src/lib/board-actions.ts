@@ -58,3 +58,27 @@ export async function inviteMember(boardId: string, formData: FormData) {
 
   revalidatePath(`/board/${boardId}`);
 }
+
+export async function removeMember(boardId: string, memberUserId: string) {
+  const user = await requireCurrentUser();
+  if (!user) {
+    redirect("/");
+  }
+
+  const membership = await prisma.boardMembership.findUnique({
+    where: { boardId_userId: { boardId, userId: user.id } },
+  });
+  if (membership?.role !== "OWNER") {
+    throw new Error("Only the board owner can remove collaborators");
+  }
+
+  if (memberUserId === user.id) {
+    throw new Error("The board owner cannot remove themselves");
+  }
+
+  await prisma.boardMembership.delete({
+    where: { boardId_userId: { boardId, userId: memberUserId } },
+  });
+
+  revalidatePath(`/board/${boardId}`);
+}
