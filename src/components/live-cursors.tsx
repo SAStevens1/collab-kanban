@@ -1,7 +1,7 @@
 "use client";
 
 import { useMyPresence, useOthers } from "@liveblocks/react";
-import type { PointerEvent } from "react";
+import type { PointerEvent, ReactNode } from "react";
 
 const CURSOR_COLORS = [
   "#E57373",
@@ -16,31 +16,18 @@ function colorForConnectionId(connectionId: number) {
   return CURSOR_COLORS[connectionId % CURSOR_COLORS.length];
 }
 
-export function LiveCursors() {
-  const [, updateMyPresence] = useMyPresence();
+function Cursors() {
   const others = useOthers();
 
-  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
-    updateMyPresence({ cursor: { x: event.clientX, y: event.clientY } });
-  }
-
-  function handlePointerLeave() {
-    updateMyPresence({ cursor: null });
-  }
-
   return (
-    <div
-      onPointerMove={handlePointerMove}
-      onPointerLeave={handlePointerLeave}
-      className="absolute inset-0"
-    >
+    <div className="pointer-events-none absolute inset-0">
       {others.map(({ connectionId, presence, info }) => {
         if (!presence.cursor) return null;
 
         return (
           <div
             key={connectionId}
-            className="pointer-events-none absolute left-0 top-0 flex items-center gap-2"
+            className="absolute left-0 top-0 flex items-center gap-2"
             style={{
               transform: `translate(${presence.cursor.x}px, ${presence.cursor.y}px)`,
             }}
@@ -60,6 +47,29 @@ export function LiveCursors() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+export function PresenceLayer({ children }: { children: ReactNode }) {
+  const [, updateMyPresence] = useMyPresence();
+
+  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
+    updateMyPresence({ cursor: { x: event.clientX, y: event.clientY } });
+  }
+
+  function handlePointerLeave() {
+    updateMyPresence({ cursor: null });
+  }
+
+  return (
+    <div
+      onPointerMove={handlePointerMove}
+      onPointerLeave={handlePointerLeave}
+      className="relative h-full w-full"
+    >
+      {children}
+      <Cursors />
     </div>
   );
 }
